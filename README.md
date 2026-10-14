@@ -97,6 +97,8 @@ The starting point for the pool mechanics was the billiards simulation in [theph
 
 ![9-ball, mid-game](docs/9ball.png)
 
+> **About the Claude co-author:** Claude was used only to upload these files, which I had already written and stored locally, to GitHub, and to write this README and its supporting files (such as screenshots, `.gitignore` and `requirements.txt`). The code itself is my own work.
+
 ---
 
 <sub>Phạm Duy Long · Hà Nội · [phamduylong.com](https://phamduylong.com)</sub>
