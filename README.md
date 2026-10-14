@@ -79,10 +79,6 @@ billiard_HTML/
 └── docs/             screenshots for this README
 ```
 
-## What I learned
-
-[Long: 2–3 sentences in your own words. For example, what was harder than you expected, what you rebuilt, or what you'd do differently now.]
-
 ## Limitations
 
 - **9-ball doesn't enforce hitting the lowest-numbered ball first**, so any ball can be played at any time.
