@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Play 9 Ball</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+</head>
+<body style="background-color: rgb(234, 234, 235);">
+<br>
+<div id="scoreboard">
+    <b style="font-family: 'Lucida Console';color: rgb(149, 46, 212); font-size: 50px;">Rack</b>
+    <span id="dots">
+        <div class="dot-container"><span class="dot" id="1"></span><span class="dot-number"><b>1</b></span></div>
+        <div class="dot-container"><span class="dot" id="2"></span><span class="dot-number"><b>2</b></span></div>
+        <div class="dot-container"><span class="dot" id="3"></span><span class="dot-number"><b>3</b></span></div>
+        <div class="dot-container"><span class="dot" id="4"></span><span class="dot-number"><b>4</b></span></div>
+        <div class="dot-container"><span class="dot" id="5"></span><span class="dot-number"><b>5</b></span></div>
+        <div class="dot-container"><span class="dot" id="6"></span><span class="dot-number"><b>6</b></span></div>
+        <div class="dot-container"><span class="dot" id="7"></span><span class="dot-number"><b>7</b></span></div>
+        <div class="dot-container"><span class="dot" id="8"></span><span class="dot-number"><b>8</b></span></div>
+        <div class="dot-container"><span class="dot" id="9"></span><span class="dot-number"><b>9</b></span></div>
+    </span>
+    <span id="turn" style="font-family: 'Lucida Console'"></span>
+    <button id="reset" style="font-family: 'Lucida Console'">Reset</button>
+</div>  
+<br> 
+<style>
+.dot{
+  display:inline-block;
+  width:40px; height:40px;
+  border-radius:50%;
+  margin-left:20px;    
+  background:rgb(195, 150, 223);      
+}
+.dot.filled { background:rgb(149, 46, 212); }
+.dot-number {
+  display: block;
+  color: rgb(149, 46, 212); /* Purple color matching filled dots */
+  font-size: 20px; 
+  font-style: oblique; /* Little size */
+  text-align: center;
+  margin-top: -5px; /* Adjust to position under dot */
+}
+.dot-container {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin-left: 20px; /* Maintain spacing between groups */
+}
+#reset {
+  background:orange; color:#fff; border:none; border-radius:8px;
+  font-size:35px; padding:10px 24px; cursor:pointer;
+  position:absolute; top:20px; right:15px;}
+#turn {
+  background:green; color:#fff; border:none; border-radius:8px;
+  font-size:35px; padding:10px 24px;
+  position:absolute; top:20px; right:150px;}
+#reset:hover { background:rgb(243, 195, 105); color:rgb(219, 145, 8)}
+</style> 
+<script>
+    const {Engine, Render, Runner,Bodies, Body,World, Mouse,Composite, Events, Vector} = Matter
+    const engine = Engine.create({gravity: { x: 0, y: 0, scale: 0 }}),
+          world = engine.world;
+    const width = 1400,
+          height = 700;
+    const render = Render.create({element: document.body,engine: engine,options: {width,height, background:'#367041', wireframes: false}})
+//globals
+var cueball
+var ball9
+var ballsmoving = false
+var gamestart = false
+var turn = 0
+var lastShotProcessed = 0
+var shotId = 0
+var lastShotId = -1
+var currentnumber=1
+var currenttouched=null
+var ball9potted=false
+const pottedballs = [] //determine type after first round
+var cuepotted = false //check if cue is potted?
+var aimline = false
+var aimlinestart = null
+var aimlineend = null
+const mouse = Mouse.create(render.canvas)
+//world setup
+function checkturn() {
+    const turninner = document.getElementById('turn');
+    turninner.innerHTML = `Turn: P${turn + 1}`;
+    }
+function nextturn(){
+  turn=1-turn; checkturn();}
+function markdot(number) {
+    try {
+        if (number === undefined || number === null) return
+        const dot = document.getElementById(String(number));
+        if (dot && !dot.classList.contains('filled')) {
+            dot.classList.add('filled');}
+    } catch (b) {}
+}
+function countbytype(arr, type) {
+  return arr.filter(item => item.balltype === type).length;
+}
+function shuffle(array) {
+  let currentIndex = array.length, randomIndex;
+  while (currentIndex !== 0) {
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+    [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+  }; return array;}
+const bordersinner = [
+    Bodies.rectangle(373, 670, 525, 60, {isStatic:true,render:{fillStyle:"#2A5A33"}}),
+    Bodies.rectangle(1027, 670, 525, 60, {isStatic:true,render:{fillStyle:"#2A5A33"}}),
+    Bodies.rectangle(373, 30, 525, 60, {isStatic:true,render:{fillStyle:"#2A5A33"}}),
+    Bodies.rectangle(1027, 30, 525, 60, {isStatic:true,render:{fillStyle:"#2A5A33"}}),
+    Bodies.rectangle(1370, 350, 60, 480, {isStatic:true,render:{fillStyle:"#2A5A33"}}),
+    Bodies.rectangle(30, 350, 60, 480, {isStatic:true,render:{fillStyle:"#2A5A33"}})];World.add(world,bordersinner)
+const pockets=[
+    Bodies.circle(40, 40, 60, {isStatic:true,isSensor:true,render:{fillStyle:"black"}}),
+    Bodies.circle(700, 40, 55, {isStatic:true,isSensor:true,render:{fillStyle:"black"}}),
+    Bodies.circle(1360,40, 60, {isStatic:true,isSensor:true,render:{fillStyle:"black"}}),
+    Bodies.circle(40, 660, 60, {isStatic:true,isSensor:true,render:{fillStyle:"black"}}),
+    Bodies.circle(700,660, 55, {isStatic:true,isSensor:true,render:{fillStyle:"black"}}),
+    Bodies.circle(1360,660,60, {isStatic:true,isSensor:true,render:{fillStyle:"black"}}),];World.add(world,pockets)
+const bordersouter = [
+        Bodies.rectangle(700, 700, 1400, 60, {isStatic:true,render:{fillStyle:"#782f19"}}),
+        Bodies.rectangle(1400, 350, 60, 700, {isStatic:true,render:{fillStyle:"#782f19"}}),
+        Bodies.rectangle(0, 350, 60, 700, {isStatic:true,render:{fillStyle:"#782f19"}}),
+        Bodies.rectangle(700, 0, 1400, 60, {isStatic:true,render:{fillStyle:"#782f19"}}),
+        Bodies.rectangle(0, 700, 220, 60, {isStatic:true,render:{fillStyle:"#545154"}}),
+        Bodies.rectangle(1400, 700, 220, 60, {isStatic:true,render:{fillStyle:"#545154"}}),
+        Bodies.rectangle(1400, 700, 60, 220, {isStatic:true,render:{fillStyle:"#545154"}}),
+        Bodies.rectangle(1400, 0, 60, 220, {isStatic:true,render:{fillStyle:"#545154"}}),
+        Bodies.rectangle(0, 700, 60, 220, {isStatic:true,render:{fillStyle:"#545154"}}),
+        Bodies.rectangle(0, 0, 60, 220, {isStatic:true,render:{fillStyle:"#545154"}}),
+        Bodies.rectangle(0, 0, 220, 60, {isStatic:true,render:{fillStyle:"#545154"}}),
+        Bodies.rectangle(1400, 0, 220, 60, {isStatic:true,render:{fillStyle:"#545154"}}),
+        Bodies.rectangle(700, 700, 130, 60, {isStatic:true,render:{fillStyle:"#545154"}}),
+        Bodies.rectangle(700, 0, 130, 60, {isStatic:true,render:{fillStyle:"#545154"}}),
+    ]; World.add(world,bordersouter)
+const prop = { 
+    density: 1.4, frictionAir: 0.007, restitution: 1 }
+const color = [
+    {render:{fillStyle: '#ebe9c3'}, balltype:"cue", label:'cueball'},
+    {render:{fillStyle: '#EDBF4E'}, balltype:'1', number:1},
+    {render:{fillStyle: '#4C8FF3'},balltype:'2', number:2},
+    {render:{fillStyle: '#E73D3D'},balltype:'3', number:3},
+    {render:{fillStyle: '#fd5384'},balltype:'4', number:4},
+    {render:{fillStyle: '#EB7117'},balltype:'5', number:5},
+    {render:{fillStyle: '#029671'},balltype:'6', number:6},
+    {render:{fillStyle: '#850818'},balltype:'7', number:7},
+    {render:{fillStyle: '#262626'}, balltype:'8', number:8},
+    {render:{fillStyle: '#EDBF4E', strokeStyle: '#ebe9c3', lineWidth: '10'}, balltype:'9', number:9}, 
+    ] 
+function setup() {
+    //global reset
+    pottedballs.length = 0;
+    cuepotted = false;
+    shotId = 0;
+    lastShotId = -1;
+    lastShotProcessed = 0;
+    aimline = false;      aimlinestart = aimlineend = null;
+    gamestart = false
+    currentnumber=1
+    currenttouched=null
+    ball9potted=false
+    //remove every active ball
+    Composite.allBodies(world).filter(b=> !b.isStatic && !b.isSensor).forEach(b => World.remove(world, b))
+    //create rack and add cue,9
+    let ballrack = []
+    cueball = Bodies.circle((width - 70) / 4, height / 2, 30,{...prop, ...color[0]})
+    ballrack.push(cueball)
+    const ball1x = 947.5          
+    const ball1y = height / 2
+    const spacing = 30*2+2 //gap:2
+    ball9 = Bodies.circle((ball1x + 2 * spacing), ball1y, 25, { ...prop, ...color[9] });
+    ballrack.push(ball9)
+    ball1 = Bodies.circle(ball1x, ball1y, 30, {...prop, ...color[1]})
+    ballrack.push(ball1)
+    //rest of ball
+    let remainingnumbers=[2,3,4,5,6,7,8]
+    remainingnumbers=shuffle(remainingnumbers)
+    let index=0
+    for (let rack = 1; rack<3; rack++) { //going collumn for collumn from left to right
+      const ballincollumn = rack+1 //rack 0(1) has 1 ball, rack 1(2) has 2 balls, ...
+      const xofcollumn = ball1x + rack*spacing //x of entire collumn
+      const ytopcollumn = ball1y - ((ballincollumn-1)*spacing)/2 //topmost y
+      for (let i=0; i<ballincollumn; i++) {
+        const yofball = ytopcollumn + i*spacing //loop for each individual ball
+        if (rack === 2 && i === 1) continue; //skip 9ball
+        const colorindex = color.findIndex(c => c.number === remainingnumbers[index]);//get index of ball
+        const newball = Bodies.circle(xofcollumn, yofball, 30,{...prop, ...color[colorindex]}) 
+        ballrack.push(newball); //add new ball with x,y,r,prop,color to rack
+        index++
+    }}
+    for (let rack = 3; rack<5; rack++) { //going collumn for collumn from left to right
+      const ballincollumn = 5-rack //rack 3(4) has 5-3=2, rack 4(5) has 5-4=1
+      const xofcollumn = ball1x + rack*spacing
+      const ytopcollumn = ball1y - ((ballincollumn-1)*spacing)/2 
+      for (let i=0; i<ballincollumn; i++) {
+        const yofball = ytopcollumn + i*spacing 
+        const colorindex = color.findIndex(c => c.number === remainingnumbers[index]);
+        const newball = Bodies.circle(xofcollumn, yofball, 30,{...prop, ...color[colorindex]}) 
+        ballrack.push(newball); 
+        index++
+    }}
+    World.add(world, ballrack)
+    document.querySelectorAll('#dots .dot')
+          .forEach(d => d.classList.remove('filled'))
+    document.getElementById('turn').innerHTML = '1'
+    checkturn()
+    
+}
+function resetcue(){
+    const startcue = { x:(width - 70) / 4, y:height / 2 }; Body.setPosition(cueball, startcue); Body.setVelocity(cueball, { x:0, y:0 })}
+function reset9ball() {
+    Body.setPosition(ball9, {x:1071.5, y:350}), Body.setVelocity(ball9, { x:0, y:0 })}
+//main
+Events.on(engine, 'collisionStart', e => {
+    e.pairs.forEach(({ bodyA: a, bodyB: b }) => {
+      const pocket = a.isSensor ? a : b.isSensor ? b : null;
+      if (pocket) {
+        const ball = pocket === a ? b : a;
+        if (ball.balltype === 'cue') {
+           cuepotted = true;
+           resetcue();
+        } else if (ball&&ball.balltype === "9") {
+            ball9potted = true;
+            pottedballs.push(ball)
+            World.remove(world, ball)
+        } else if (ball&&ball.number!== undefined){
+            pottedballs.push(ball);
+            World.remove(world, ball);}
+}});});
+Events.on(render, 'afterRender', () => {
+    const ctx=render.context //template for rendering line with start-end coords
+    if(aimline&&aimlinestart&&aimlineend){  //if one of these false/null/undefined
+        ctx.save();
+        ctx.strokeStyle = `rgba(255,255,255,0.8)`;
+        ctx.lineWidth=8;
+        ctx.setLineDash([15, 10]);  //setting dashed lines [length, gap]
+        ctx.beginPath();
+        ctx.moveTo(aimlinestart.x, aimlinestart.y); //start
+        ctx.lineTo(aimlineend.x, aimlineend.y); //end
+        ctx.stroke();
+        ctx.restore();} //aimline
+        ctx.setLineDash([])
+        ctx.font = '24px Arial';//labels
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+    Composite.allBodies(world).forEach(b => {
+    if (b.number !== undefined){
+      ctx.fillText(b.number, b.position.x, b.position.y);
+}})})
+render.canvas.addEventListener('mousedown', b =>{ 
+    const{x,y} = mouse.position //current mouse coords
+    if (((x-cueball.position.x)**2 + (y-cueball.position.y)**2 <= cueball.circleRadius**2)) //the pointer clicked on the cue ball
+        {aimline=true; aimlinestart={x:cueball.position.x, y:cueball.position.y}; aimlineend = {x,y}}})
+render.canvas.addEventListener('mousemove', h =>{
+    if (aimline){aimlineend={x:mouse.position.x, y:mouse.position.y}}}) //check aimline false/null/undefined
+render.canvas.addEventListener('mouseup', a =>{
+  if (!aimline || !aimlinestart || !aimlineend) {
+    aimline = false;
+    return;}
+  Body.setVelocity(cueball, { x: Math.cos(Math.atan2((aimlinestart.y - aimlineend.y), (aimlinestart.x - aimlineend.x))) * (Math.min((Math.sqrt((aimlinestart.x - aimlineend.x)**2 + (aimlinestart.y - aimlineend.y)**2)) * 0.06, 50)), y: Math.sin(Math.atan2((aimlinestart.y - aimlineend.y), (aimlinestart.x - aimlineend.x))) * (Math.min((Math.sqrt((aimlinestart.x - aimlineend.x)**2 + (aimlinestart.y - aimlineend.y)**2)) * 0.06, 50)) });
+  aimline = false; 
+  gamestart = true; 
+  shotId++; 
+}) //to hide aim line in afterupdate
+Events.on(engine, 'afterUpdate', () => {
+    ballsmoving = Composite.allBodies(world).some(b => !b.isStatic && b.speed > 0.1);
+    const now = Date.now();
+    if (gamestart && !ballsmoving && shotId !== lastShotId && now - lastShotProcessed >= 500) {
+        lastShotId = shotId;
+        lastShotProcessed = now;
+        pottedballs.forEach(ball => {
+        if (ball.balltype === '9') {
+          ball9potted = true;
+        }
+        })
+    if (pottedballs.length === 0) {nextturn()}
+    else if (ball9potted && !cuepotted) {
+            window.location.assign(turn === 0 ? 'p1win.html' : 'p2win.html')}
+    else if (ball9potted&&cuepotted||cuepotted&&!ball9potted){
+            resetcue(); nextturn();
+            pottedballs.forEach(ball => {
+                if (ball && ball.balltype !== 'cue' && ball.number !== 9 && ball.number !== undefined) {markdot(ball.number);}})
+            if(ball9potted){reset9ball()}
+    }
+    else {
+        let validPot = false;
+        pottedballs.forEach(ball => {
+        if (ball && ball.balltype !== 'cue' && ball.number !== 9 && ball.number !== undefined) {markdot(ball.number);validPot = true}});
+        if (!validPot) {nextturn()}
+    }
+    pottedballs.length = 0;
+    cuepotted = false, ball9potted=false;
+}});
+const resetbutton = document.getElementById('reset'); 
+resetbutton.addEventListener('click', setup)
+//render
+Render.run(render);
+Runner.run(Runner.create(), engine);
+setup()
+</script>
+</body>
+</html>
